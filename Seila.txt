@@ -1,0 +1,340 @@
+--[[ ============================================
+     HUB | Rayfield UI - VERSÃO ESTÁVEL (Build 1.69)
+     Origem: GitHub Oficial SiriusSoftwareLtd
+     ✅ Anti Knockback Melhorado
+     ✅ Anti Teleporter (Imune a TP do jogo/servidor)
+     ✅ Godmode | Anti AFK | Desbloquear Câmera
+     ✅ ESP Jogador + Nome
+     ✅ Teleporter Base (GET + TP)
+     ============================================ ]]
+
+-- === CARREGA RAYFIELD - VERSÃO ESTÁVEL OFICIAL ===
+-- Fonte: https://github.com/SiriusSoftwareLtd/Rayfield [[__LINK_ICON]](http://raw.githubusercontent.com/sirius-menu/rayfield/refs/heads/main/source.lua?f_link_type=f_linkinlinenote&flow_extra=eyJkb2NfaWQiOiI0OWNmOWMxYTJiMWFiNTljLTBkMjc1NDBjMzExODE1YzciLCJpbmxpbmVfZGlzcGxheV9wb3NpdGlvbiI6MCwiZG9jX3Bvc2l0aW9uIjowfQ%3D%3D "[__LINK_ICON]")
+local Rayfield = loadstring(game:HttpGet("https://raw.githubusercontent.com/SiriusSoftwareLtd/Rayfield/main/source.lua"))()
+
+-- Serviços
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local VirtualUser = game:GetService("VirtualUser")
+local plr = Players.LocalPlayer
+
+-- Variáveis de controle
+local savedCFrame = nil
+local lastSafePosition = nil
+local connections = {}
+local TELEPORT_THRESHOLD = 80 -- Distância em studs que considera teleporte
+
+-- Pegar personagem sempre que renascer
+local function getChar() return plr.Character or plr.CharacterAdded:Wait() end
+local function getHRP()
+    local char = getChar()
+    return char:FindFirstChild("HumanoidRootPart"), char
+end
+
+-- Salvar posição segura
+local function updateSafePosition()
+    local hrp = getHRP()
+    if hrp then lastSafePosition = hrp.CFrame end
+end
+
+-- ============================================
+-- JANELA PRINCIPAL
+-- ============================================
+local Window = Rayfield:CreateWindow({
+    Name = "Break a Brainrot Egg Hub",
+    Icon = 4483362458,
+    LoadingTitle = "Carregando...",
+    LoadingSubtitle = "Versão Estável Rayfield",
+    Theme = "Default",
+    DisableRayfieldPrompts = false,
+    DisableBuildWarnings = true,
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = nil,
+        FileName = "BrainrotEggHub"
+    },
+    Discord = { Enabled = false }
+})
+
+-- ============================================
+-- ABA MAIN
+-- ============================================
+local MainTab = Window:CreateTab("Main", 4483362458)
+
+-- Botão: Segurar Instantâneo
+MainTab:CreateButton({
+    Name = "🔗 Segurar Instantâneo",
+    Callback = function()
+        pcall(function()
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/mallu837/jenicakes/refs/heads/main/Break%20a%20Brainrot%20Egg/Loader"))()
+        end)
+        Rayfield:Notify({ Title = "Carregado", Content = "Script carregado!", Duration = 4 })
+    end,
+})
+
+-- 🔷 ANTI KNOCKBACK MELHORADO
+MainTab:CreateToggle({
+    Name = "🛡️ Anti Knockback Melhorado",
+    CurrentValue = false,
+    Flag = "antiKB",
+    Callback = function(Value)
+        if Value then
+            if connections.antiKB then connections.antiKB:Disconnect() end
+            connections.antiKB = RunService.Heartbeat:Connect(function()
+                local hrp = getHRP()
+                if not hrp then return end
+                local vel = hrp.AssemblyLinearVelocity
+                local horizontal = Vector3.new(vel.X, 0, vel.Z).Magnitude
+                -- Bloqueia empurrões fortes, mas permite movimento normal
+                if horizontal > 55 then
+                    hrp.AssemblyLinearVelocity = Vector3.new(0, vel.Y, 0)
+                end
+            end)
+        else
+            if connections.antiKB then
+                connections.antiKB:Disconnect()
+                connections.antiKB = nil
+            end
+        end
+    end,
+})
+
+-- 🔷 ANTI TELEPORTER
+MainTab:CreateToggle({
+    Name = "🚫 Anti Teleporter",
+    CurrentValue = false,
+    Flag = "antiTeleport",
+    Callback = function(Value)
+        if Value then
+            updateSafePosition()
+            if connections.antiTele then connections.antiTele:Disconnect() end
+            connections.antiTele = RunService.Heartbeat:Connect(function()
+                local hrp = getHRP()
+                if not hrp or not lastSafePosition then return end
+                local dist = (hrp.Position - lastSafePosition.Position).Magnitude
+                if dist > TELEPORT_THRESHOLD then
+                    hrp.CFrame = lastSafePosition -- Volta pra posição segura
+                else
+                    updateSafePosition() -- Atualiza posição se movimento for normal
+                end
+            end)
+            Rayfield:Notify({ Title = "Anti Teleporter", Content = "Ativado — Imune a Teleports!", Duration = 4 })
+        else
+            if connections.antiTele then
+                connections.antiTele:Disconnect()
+                connections.antiTele = nil
+            end
+            Rayfield:Notify({ Title = "Anti Teleporter", Content = "Desativado", Duration = 3 })
+        end
+    end,
+})
+
+-- 🔷 GODMODE
+MainTab:CreateToggle({
+    Name = "💀 Godmode (Invencível)",
+    CurrentValue = false,
+    Flag = "godmode",
+    Callback = function(Value)
+        if Value then
+            local function applyGod()
+                local char = getChar()
+                local hum = char:WaitForChild("Humanoid")
+                hum.BreakJointsOnDeath = false
+                hum.MaxHealth = math.huge
+                hum.Health = math.huge
+            end
+            applyGod()
+            connections.godmode = plr.CharacterAdded:Connect(function()
+                task.wait(0.5)
+                applyGod()
+            end)
+            connections.godmodeLoop = RunService.Heartbeat:Connect(function()
+                local char = plr.Character
+                if char then
+                    local hum = char:FindFirstChildOfClass("Humanoid")
+                    if hum then hum.Health = math.huge end
+                end
+            end)
+        else
+            if connections.godmode then connections.godmode:Disconnect() end
+            if connections.godmodeLoop then connections.godmodeLoop:Disconnect() end
+            local char = plr.Character
+            if char then
+                local hum = char:FindFirstChildOfClass("Humanoid")
+                if hum then
+                    hum.Health = 100
+                    hum.MaxHealth = 100
+                    hum.BreakJointsOnDeath = true
+                end
+            end
+        end
+    end,
+})
+
+-- 🔷 ANTI AFK
+MainTab:CreateToggle({
+    Name = "😴 Anti AFK",
+    CurrentValue = false,
+    Flag = "antiAFK",
+    Callback = function(Value)
+        if Value then
+            connections.antiAFK = plr.Idled:Connect(function()
+                VirtualUser:CaptureController()
+                VirtualUser:ClickButton2(Vector2.new())
+            end)
+        else
+            if connections.antiAFK then connections.antiAFK:Disconnect() end
+        end
+    end,
+})
+
+-- Botão: Desbloquear Câmera
+MainTab:CreateButton({
+    Name = "📷 Desbloquear Câmera",
+    Callback = function()
+        pcall(function()
+            plr.CameraMode = Enum.CameraMode.Classic
+            plr.CameraMinZoomDistance = 0.5
+            plr.CameraMaxZoomDistance = 10000
+        end)
+        Rayfield:Notify({ Title = "Câmera", Content = "Desbloqueada!", Duration = 3 })
+    end,
+})
+
+-- ============================================
+-- ABA ESP
+-- ============================================
+local EspTab = Window:CreateTab("ESP", 4483362458)
+local espFolder = nil
+
+local function limparESP()
+    if espFolder then espFolder:Destroy() espFolder = nil end
+end
+
+local function aplicarESP(jogador, comNome)
+    if jogador == plr then return end
+    local char = jogador.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    -- Highlight
+    if not hrp:FindFirstChild("ESP_Highlight") then
+        local hl = Instance.new("Highlight")
+        hl.Name = "ESP_Highlight"
+        hl.FillColor = Color3.fromRGB(255, 0, 0)
+        hl.OutlineColor = Color3.fromRGB(255, 255, 255)
+        hl.FillTransparency = 0.5
+        hl.Adornee = char
+        hl.Parent = espFolder
+    end
+
+    -- Nome
+    if comNome and not hrp:FindFirstChild("ESP_Name") then
+        local bb = Instance.new("BillboardGui")
+        bb.Name = "ESP_Name"
+        bb.Size = UDim2.new(0, 150, 0, 30)
+        bb.StudsOffset = Vector3.new(0, 3, 0)
+        bb.AlwaysOnTop = true
+        bb.Adornee = hrp
+        local txt = Instance.new("TextLabel")
+        txt.Size = UDim2.new(1, 0, 1, 0)
+        txt.BackgroundTransparency = 1
+        txt.Text = jogador.Name
+        txt.TextColor3 = Color3.fromRGB(255, 255, 255)
+        txt.TextStrokeTransparency = 0
+        txt.Font = Enum.Font.SourceSansBold
+        txt.TextSize = 18
+        txt.Parent = bb
+        bb.Parent = espFolder
+    end
+end
+
+EspTab:CreateToggle({
+    Name = "👤 ESP Jogador",
+    CurrentValue = false,
+    Flag = "espJogador",
+    Callback = function(Value)
+        if Value then
+            limparESP()
+            espFolder = Instance.new("Folder", workspace)
+            espFolder.Name = "ESP_Storage"
+            connections.espLoop = RunService.Heartbeat:Connect(function()
+                for _, v in ipairs(Players:GetPlayers()) do
+                    if v ~= plr then aplicarESP(v, false) end
+                end
+            end)
+        else
+            if connections.espLoop then connections.espLoop:Disconnect() end
+            limparESP()
+        end
+    end,
+})
+
+EspTab:CreateToggle({
+    Name = "🏷️ ESP Nome",
+    CurrentValue = false,
+    Flag = "espNome",
+    Callback = function(Value)
+        if Value then
+            if not espFolder then
+                espFolder = Instance.new("Folder", workspace)
+                espFolder.Name = "ESP_Storage"
+            end
+            connections.espNome = RunService.Heartbeat:Connect(function()
+                for _, v in ipairs(Players:GetPlayers()) do
+                    if v ~= plr then aplicarESP(v, true) end
+                end
+            end)
+        else
+            if connections.espNome then connections.espNome:Disconnect() end
+            if espFolder then
+                for _, obj in ipairs(espFolder:GetChildren()) do
+                    if obj.Name == "ESP_Name" then obj:Destroy() end
+                end
+            end
+        end
+    end,
+})
+
+-- ============================================
+-- ABA OP / PROTECTION BASE
+-- ============================================
+local BaseTab = Window:CreateTab("OP / Protection Base", 4483362458)
+
+BaseTab:CreateParagraph({
+    Title = "⚠️ AVISO IMPORTANTE",
+    Content = "Va para o último andar da sua base, click no botão GET para copiar sua coordenada, e depois pode usar e click no botão TP. Nunca use fora da base, não recomendado."
+})
+
+BaseTab:CreateButton({
+    Name = "📍 GET (Salvar Coordenada)",
+    Callback = function()
+        local hrp, char = getHRP()
+        if hrp then
+            savedCFrame = char:GetPivot()
+            local pos = savedCFrame.Position
+            pcall(function() setclipboard(tostring(pos.X..", "..pos.Y..", "..pos.Z)) end)
+            Rayfield:Notify({
+                Title = "✅ Coordenada Salva",
+                Content = string.format("X: %.1f  Y: %.1f  Z: %.1f", pos.X, pos.Y, pos.Z),
+                Duration = 5
+            })
+        end
+    end,
+})
+
+BaseTab:CreateButton({
+    Name = "🚀 TP (Teleportar)",
+    Callback = function()
+        if not savedCFrame then
+            Rayfield:Notify({ Title = "❌ Erro", Content = "Clique em GET primeiro!", Duration = 4 })
+            return
+        end
+        local _, char = getHRP()
+        char:PivotTo(savedCFrame)
+        Rayfield:Notify({ Title = "✅ Teleportado!", Content = "Voltou para sua base!", Duration = 4 })
+    end,
+})
+
+Rayfield:Notify({ Title = "✅ Hub Pronto", Content = "Carregado com Rayfield Estável (Build 1.69)", Duration = 5 })
