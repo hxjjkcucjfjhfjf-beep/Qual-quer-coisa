@@ -1,0 +1,369 @@
+-- Carrega a biblioteca WindUI
+local WindUI = loadstring(game:HttpGet("[github.com](https://github.com/Footagesus/WindUI/releases/latest/download/main.lua)"))()
+
+-- Serviços
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local VirtualUser = game:GetService("VirtualUser")
+local plr = Players.LocalPlayer
+
+-- Variáveis de controle
+local lastSafePosition = nil
+local connections = {}
+local savedCFrame = nil
+local TELEPORT_THRESHOLD = 80
+
+-- Funções auxiliares
+local function getChar()
+    return plr.Character or plr.CharacterAdded:Wait()
+end
+
+local function getHRP()
+    local char = plr.Character
+    if not char then return nil, nil end
+    return char:FindFirstChild("HumanoidRootPart"), char
+end
+
+local function updateSafePosition()
+    local hrp = getHRP()
+    if hrp then lastSafePosition = hrp.CFrame end
+end
+
+local function disconnect(name)
+    if connections[name] then
+        connections[name]:Disconnect()
+        connections[name] = nil
+    end
+end
+
+-- ============================================
+-- JANELA PRINCIPAL
+-- ============================================
+local Window = WindUI:CreateWindow({
+    Title = "Break a Brainrot Egg Hub",
+    Icon = "shield-check",
+    Author = "Seu Nome",
+    Folder = "BrainrotEggHub",
+    Size = UDim2.fromOffset(540, 460),
+    Theme = "Dark",
+    Transparent = true,
+    Resizable = true,
+})
+
+Window:SetToggleKey(Enum.KeyCode.RightShift)
+
+WindUI:Notify({
+    Title = "✅ Hub Carregado!",
+    Content = "Bem-vindo ao seu Hub",
+    Icon = "check-circle",
+    Duration = 4,
+})
+
+-- ============================================
+-- SEÇÃO PRINCIPAL
+-- ============================================
+local MainSection = Window:Section({
+    Title = "⚙️ Funções Principais",
+    Icon = "settings",
+    Opened = true,
+})
+
+local MainTab = MainSection:Tab({ Title = "Main", Icon = "home" })
+
+-- Segurar Instantâneo
+MainTab:Button({
+    Title = "🔗 Segurar Instantâneo",
+    Desc = "Carrega o script do Brainrot Egg",
+    Icon = "link",
+    Callback = function()
+        WindUI:Popup({
+            Title = "⚠️ Confirmar",
+            Icon = "info",
+            Content = "Deseja carregar o script do Egg?",
+            Buttons = {
+                {
+                    Title = "Cancelar",
+                    Variant = "Tertiary",
+                    Callback = function() end,
+                },
+                {
+                    Title = "Carregar",
+                    Icon = "check",
+                    Variant = "Primary",
+                    Callback = function()
+                        task.spawn(function()
+                            local ok, err = pcall(function()
+                                loadstring(game:HttpGet("[raw.githubusercontent.com](https://raw.githubusercontent.com/mallu837/jenicakes/refs/heads/main/Break%20a%20Brainrot%20Egg/Loader)"))()
+                            end)
+                            WindUI:Notify({
+                                Title = ok and "✅ Sucesso" or "❌ Erro",
+                                Content = ok and "Script carregado!" or tostring(err),
+                                Icon = ok and "check" or "x",
+                                Duration = 4,
+                            })
+                        end)
+                    end,
+                },
+            },
+        })
+    end,
+})
+
+MainTab:Divider()
+
+-- Anti Knockback
+MainTab:Toggle({
+    Title = "🛡️ Anti Knockback Melhorado",
+    Desc = "Bloqueia empurrões sem atrapalhar movimento",
+    Icon = "shield",
+    Value = false,
+    Callback = function(Value)
+        disconnect("antiKB")
+        if Value then
+            connections.antiKB = RunService.Heartbeat:Connect(function()
+                local hrp = getHRP()
+                if not hrp then return end
+                local vel = hrp.AssemblyLinearVelocity
+                if Vector3.new(vel.X, 0, vel.Z).Magnitude > 55 then
+                    hrp.AssemblyLinearVelocity = Vector3.new(0, vel.Y, 0)
+                end
+            end)
+        end
+        WindUI:Notify({
+            Title = Value and "🛡️ Ativado" or "🛡️ Desativado",
+            Content = Value and "Anti-KB ligado" or "Anti-KB desligado",
+            Icon = "shield",
+            Duration = 3,
+        })
+    end,
+})
+
+-- Anti Teleporter
+MainTab:Toggle({
+    Title = "🚫 Anti Teleporter",
+    Desc = "Imune a teleports do jogo/servidor",
+    Icon = "ban",
+    Value = false,
+    Callback = function(Value)
+        disconnect("antiTele")
+        disconnect("antiTeleRespawn")
+        if Value then
+            updateSafePosition()
+            connections.antiTele = RunService.Heartbeat:Connect(function()
+                local hrp = getHRP()
+                if not hrp then return end
+                if lastSafePosition and (hrp.Position - lastSafePosition.Position).Magnitude > TELEPORT_THRESHOLD then
+                    hrp.CFrame = lastSafePosition
+                else
+                    lastSafePosition = hrp.CFrame
+                end
+            end)
+            -- Ao renascer, reinicia a posição segura
+            connections.antiTeleRespawn = plr.CharacterAdded:Connect(function(char)
+                lastSafePosition = nil
+                local hrp = char:WaitForChild("HumanoidRootPart", 5)
+                if hrp then lastSafePosition = hrp.CFrame end
+            end)
+        end
+        WindUI:Notify({
+            Title = Value and "🚫 Ativado" or "🚫 Desativado",
+            Content = Value and "Anti-Teleporter ativo" or "Anti-Teleporter desligado",
+            Icon = "ban",
+            Duration = 3,
+        })
+    end,
+})
+
+-- Godmode
+MainTab:Toggle({
+    Title = "💀 Godmode",
+    Desc = "Fica invencível",
+    Icon = "skull",
+    Value = false,
+    Callback = function(Value)
+        disconnect("godmode")
+        disconnect("godLoop")
+        if Value then
+            local function apply(char)
+                local hum = char and char:WaitForChild("Humanoid", 5)
+                if hum then
+                    hum.MaxHealth = math.huge
+                    hum.Health = math.huge
+                end
+            end
+            apply(plr.Character)
+            connections.godmode = plr.CharacterAdded:Connect(apply)
+            connections.godLoop = RunService.Heartbeat:Connect(function()
+                local hum = plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
+                if hum and hum.Health < hum.MaxHealth then
+                    hum.Health = hum.MaxHealth
+                end
+            end)
+        else
+            local hum = plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
+            if hum then
+                hum.MaxHealth = 100
+                hum.Health = 100
+            end
+        end
+        WindUI:Notify({
+            Title = Value and "💀 Ativado" or "💀 Desativado",
+            Content = Value and "Invencível" or "Voltou ao normal",
+            Icon = "skull",
+            Duration = 3,
+        })
+    end,
+})
+
+-- Anti AFK
+MainTab:Toggle({
+    Title = "😴 Anti AFK",
+    Desc = "Não é kickado por inatividade",
+    Icon = "moon",
+    Value = false,
+    Callback = function(Value)
+        disconnect("antiAFK")
+        if Value then
+            connections.antiAFK = plr.Idled:Connect(function()
+                VirtualUser:CaptureController()
+                VirtualUser:ClickButton2(Vector2.new())
+            end)
+        end
+        WindUI:Notify({
+            Title = Value and "😴 Ativado" or "😴 Desativado",
+            Content = Value and "Sem kick por AFK" or "Anti-AFK desligado",
+            Icon = "moon",
+            Duration = 3,
+        })
+    end,
+})
+
+MainTab:Divider()
+
+-- Desbloquear Câmera
+MainTab:Button({
+    Title = "📷 Desbloquear Câmera",
+    Desc = "Remove limites de zoom",
+    Icon = "camera",
+    Callback = function()
+        pcall(function()
+            plr.CameraMode = Enum.CameraMode.Classic
+            plr.CameraMinZoomDistance = 0.5
+            plr.CameraMaxZoomDistance = 10000
+        end)
+        WindUI:Notify({ Title = "📷 Pronto", Content = "Câmera desbloqueada", Icon = "camera", Duration = 3 })
+    end,
+})
+
+-- ============================================
+-- SEÇÃO TELEPORTE BASE
+-- ============================================
+local BaseSection = Window:Section({
+    Title = "🏠 Teleporte da Base",
+    Icon = "map-pin",
+    Opened = true,
+})
+
+local BaseTab = BaseSection:Tab({ Title = "Base", Icon = "home" })
+
+BaseTab:Paragraph({
+    Title = "⚠️ Instruções",
+    Desc = "Fique em sua base → clique em GET → depois use TP para voltar. Não use fora da base!",
+})
+
+BaseTab:Divider()
+
+-- GET
+BaseTab:Button({
+    Title = "📍 GET — Salvar Posição",
+    Desc = "Salva suas coordenadas atuais",
+    Icon = "save",
+    Callback = function()
+        local hrp, char = getHRP()
+        if not hrp then
+            WindUI:Notify({ Title = "❌ Erro", Content = "Personagem não encontrado", Icon = "x", Duration = 3 })
+            return
+        end
+        savedCFrame = char:GetPivot()
+        local pos = savedCFrame.Position
+        pcall(function()
+            setclipboard(string.format("%.1f, %.1f, %.1f", pos.X, pos.Y, pos.Z))
+        end)
+        Window:Dialog({
+            Title = "✅ Posição Salva",
+            Icon = "check-circle",
+            Content = string.format("X: %.1f\nY: %.1f\nZ: %.1f", pos.X, pos.Y, pos.Z),
+            Buttons = {
+                { Title = "OK", Variant = "Primary", Callback = function() end },
+            },
+        })
+    end,
+})
+
+-- TP
+BaseTab:Button({
+    Title = "🚀 TP — Voltar para Base",
+    Desc = "Teleporta para a posição salva",
+    Icon = "send",
+    Callback = function()
+        if not savedCFrame then
+            WindUI:Notify({ Title = "❌ Erro", Content = "Clique em GET primeiro!", Icon = "x", Duration = 4 })
+            return
+        end
+        local _, char = getHRP()
+        if not char then return end
+        char:PivotTo(savedCFrame)
+        lastSafePosition = savedCFrame -- evita conflito com o Anti Teleporter
+        WindUI:Notify({ Title = "✅ Teleportado", Content = "Voltou para base!", Icon = "check", Duration = 3 })
+    end,
+})
+
+BaseTab:Divider()
+
+-- Teste: Travar Botão
+local TestButton
+TestButton = BaseTab:Button({
+    Title = "🔒 Teste: Travar Botão",
+    Desc = "Clique para bloquear e depois desbloquear",
+    Icon = "lock",
+    Callback = function()
+        TestButton:Lock()
+        WindUI:Notify({ Title = "🔒 Bloqueado", Content = "Botão travado por 3 segundos", Icon = "lock", Duration = 3 })
+        task.delay(3, function()
+            TestButton:Unlock()
+            WindUI:Notify({ Title = "🔓 Desbloqueado", Content = "Botão liberado!", Icon = "unlock", Duration = 3 })
+        end)
+    end,
+})
+
+-- ============================================
+-- SEÇÃO SOBRE
+-- ============================================
+local AboutSection = Window:Section({
+    Title = "ℹ️ Sobre",
+    Icon = "info",
+    Opened = false,
+})
+
+local AboutTab = AboutSection:Tab({ Title = "Info", Icon = "info" })
+
+AboutTab:Paragraph({
+    Title = "📋 Informações",
+    Desc = "UI Library: WindUI by Footagesus\n\nComponentes usados:\n• Button • Toggle • Divider\n• Notify • Popup • Dialog • Section",
+})
+
+AboutTab:Button({
+    Title = "ℹ️ Mostrar Diálogo",
+    Desc = "Exemplo de Dialog",
+    Icon = "message-circle",
+    Callback = function()
+        Window:Dialog({
+            Title = "📌 Sobre o Script",
+            Icon = "info",
+            Content = "Este hub foi criado com WindUI.\nTecla de atalho: Shift Direito",
+            Buttons = {
+                { Title = "Fechar", Callback = function() end },
+            },
+        })
+    end,
+})
